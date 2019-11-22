@@ -1,0 +1,6 @@
+command_manager
+For setpoint command, check that close enough to current position
+
+UR Script
+Add check to make sure robot doesn't experience any sudden jumps in IK solution
+

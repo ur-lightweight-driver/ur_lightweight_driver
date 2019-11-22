@@ -1,0 +1,282 @@
+def driver():
+  # Initialize variables
+  global mode_thread_running = -1 
+  reset_vars()
+  # Setup thread to read and update registers
+  run read_and_update()
+  # Continuously run command() function, which handles running correct mode thread. The mode threads then command the robot.
+  while (True):
+    command()
+    sync()
+  end
+end
+
+def command():
+  # Run correct mode thread, then continuously check if the current thread is still running.
+  # If mode switches while a mode thread is currently running, kill that mode thread
+  # Break the loop and return from this function once either the mode thread finishes or the mode thread is killed
+  mode_thread_switch() # Run the correct mode thread. This will update global variable mode_thread_running
+  sync() 
+  while (mode_thread_running != -1): # mode_thread_running = mode number of mode thread that is currently running, otherwise if no mode thread is running, it = -1
+    if mode != mode_thread_running: # If mode switched while another mode thread is already running, kill the current mode thread before breaking loop
+      kill mode_thread_handler
+      mode_thread_running = -1
+    else:
+      sync()
+    end
+  end
+end
+
+def mode_thread_switch():
+  # Based on current value of mode, run the corresponding mode thread
+  end_freedrive_mode() # End freedrive mode (if not in freedrive mode, does nothing) before running a mode thread
+  end_force_mode() # End force mode (if not in force mode, does nothing) before running a mode thread
+  if mode == STANDBY_MODE or enable == 0:
+    global mode_thread_handler = run standby()
+  elif mode == FREEDRIVE_MODE:
+    global mode_thread_handler = run freedrive()
+  elif mode == WAYPOINT_JOINT_MODE:
+    global mode_thread_handler = run waypointJoint()
+  elif mode == WAYPOINT_CARTESIAN_MODE:
+    global mode_thread_handler = run waypointCartesian()
+  elif mode == POSITION_CONTROL_JOINT_MODE:
+    global mode_thread_handler = run posControlJoint()
+  elif mode == POSITION_CONTROL_CARTESIAN_MODE:
+    global mode_thread_handler = run posControlCartesian()
+  elif mode == VELOCITY_CONTROL_JOINT_MODE:
+    global mode_thread_handler = run velControlJoint()
+  elif mode == VELOCITY_CONTROL_CARTESIAN_MODE:
+    global mode_thread_handler = run velControlCartesian()
+  elif mode == IMPEDANCE_CONTROL_MODE:
+    global mode_thread_handler = run impedanceControl()
+  end
+
+end  
+
+thread read_and_update():
+  # Continuously 
+  while(True):
+    write_output_integer_register(PING_OUTPUT_INT_REGISTER, read_input_integer_register(PING_INT_REGISTER))
+    if mode != read_input_integer_register(MODE_INT_REGISTER): # If mode changed, reset variables and re-setup watchdogs
+      reset_vars()
+      mode = read_input_integer_register(MODE_INT_REGISTER)
+      setup_watchdogs()
+    end
+    # Update each variable only if mode requires it to be updated. Create list of all modes which require variable to be updated and use list_contains() to check if current mode is one of those modes
+    if list_contains(mode, [WAYPOINT_JOINT_MODE, WAYPOINT_CARTESIAN_MODE, POSITION_CONTROL_JOINT_MODE, POSITION_CONTROL_CARTESIAN_MODE, VELOCITY_CONTROL_JOINT_MODE, VELOCITY_CONTROL_CARTESIAN_MODE, IMPEDANCE_CONTROL_MODE]):
+      setp = read_registers_into_list(SETP_DOUBLE_REGISTER_OFFSET, 6, "DOUBLE")
+    end
+    if list_contains(mode, [WAYPOINT_JOINT_MODE, WAYPOINT_CARTESIAN_MODE,VELOCITY_CONTROL_JOINT_MODE]):
+      avtr = read_registers_into_list(AVTR_DOUBLE_REGISTER_OFFSET, 4, "DOUBLE")
+    end
+    if list_contains(mode, [POSITION_CONTROL_JOINT_MODE, POSITION_CONTROL_CARTESIAN_MODE, VELOCITY_CONTROL_CARTESIAN_MODE]):
+      servoj_params = read_registers_into_list(SERVOJ_PARAMS_DOUBLE_REGISTER_OFFSET, 3, "DOUBLE")
+    end
+    if list_contains(mode, [IMPEDANCE_CONTROL_MODE]):
+      setp2 = read_registers_into_list(SETP2_DOUBLE_REGISTER_OFFSET, 6, "DOUBLE")
+    end
+    enable = read_input_integer_register(ENABLE_INT_REGISTER) # Always update enable regardless of mode
+    sync()
+  end
+end
+
+def reset_vars():
+  global mode = 0
+  global enable = 0
+  global setp = [0.0,0.0,0.0,0.0,0.0,0.0]
+  global avtr = [0.0,0.0,0.0,0.0]
+  global servoj_params = [0.0,0.0,0.0]
+  global setp2 = [0.0,0.0,0.0,0.0,0.0,0.0]
+end
+
+def setup_watchdogs():
+  # Depending on current mode, set watchdog frequencies and responses for each watchdog
+  # Right now, frequency always set to 500Hz and response is "STOP" if mode requires that variable, or "IGNORE" otherwise
+  # "STOP" preferred over "PAUSE" initially for safety. Once we are more comfortable with system, can use "PAUSE" where appropriate
+
+  mode_freq = 20
+  enable_freq = 20
+  setp_freq = 20
+  avtr_freq = 20
+  servoj_params_freq = 20
+  setp2_freq = 20
+
+  mode_resp = "IGNORE"
+  enable_resp = "IGNORE"
+  setp_resp = "IGNORE"
+  avtr_resp = "IGNORE"
+  servoj_params_resp = "IGNORE"
+  setp2_resp = "IGNORE"
+
+  if list_contains(mode, [POSITION_CONTROL_JOINT_MODE, POSITION_CONTROL_CARTESIAN_MODE, VELOCITY_CONTROL_JOINT_MODE, VELOCITY_CONTROL_CARTESIAN_MODE, FORCE_CONTROL_MODE, IMPEDANCE_CONTROL_MODE]):
+    mode_resp = "STOP"
+  end
+  if list_contains(mode, [POSITION_CONTROL_JOINT_MODE, POSITION_CONTROL_CARTESIAN_MODE, VELOCITY_CONTROL_JOINT_MODE, VELOCITY_CONTROL_CARTESIAN_MODE, FORCE_CONTROL_MODE, IMPEDANCE_CONTROL_MODE]):
+    enable_resp = "STOP"
+  end
+  if list_contains(mode, [POSITION_CONTROL_JOINT_MODE, POSITION_CONTROL_CARTESIAN_MODE, VELOCITY_CONTROL_JOINT_MODE, VELOCITY_CONTROL_CARTESIAN_MODE, FORCE_CONTROL_MODE, IMPEDANCE_CONTROL_MODE]):
+    setp_resp = "STOP"
+  end
+  if list_contains(mode, []):
+    avtr_resp = "STOP"
+  end
+  if list_contains(mode, [POSITION_CONTROL_JOINT_MODE, POSITION_CONTROL_CARTESIAN_MODE, VELOCITY_CONTROL_CARTESIAN_MODE]):
+    servoj_params_resp = "STOP"
+  end
+  if list_contains(mode, [IMPEDANCE_CONTROL_MODE]):
+    setp2_resp = "STOP"
+  end
+
+  rtde_set_watchdog("input_int_register_"+to_str(MODE_INT_REGISTER), mode_freq, mode_resp)
+  rtde_set_watchdog("input_int_register_"+to_str(ENABLE_INT_REGISTER), enable_freq, enable_resp)
+  rtde_set_watchdog("input_double_register_"+to_str(SETP_DOUBLE_REGISTER_OFFSET), setp_freq, setp_resp)
+  rtde_set_watchdog("input_double_register_"+to_str(AVTR_DOUBLE_REGISTER_OFFSET), avtr_freq, avtr_resp)
+  rtde_set_watchdog("input_double_register_"+to_str(SERVOJ_PARAMS_DOUBLE_REGISTER_OFFSET), servoj_params_freq, servoj_params_resp)
+  rtde_set_watchdog("input_double_register_"+to_str(SETP2_DOUBLE_REGISTER_OFFSET), setp2_freq, setp2_resp)
+end
+
+# MODE THREADS
+# FIRST set mode_thread_running to the corresponding mode number. 
+# THEN body of thread
+thread standby():
+  mode_thread_running = STANDBY_MODE
+  write_output_integer_register(MODE_OUTPUT_INT_REGISTER, mode_thread_running)
+  while(mode == mode_thread_running or enable == 0):
+    if not is_steady():
+      stopj(DEFAULT_JOINT_ACCELERATION)
+    end
+    sync()
+  end
+  mode_thread_running = -1
+end
+
+thread freedrive():
+  mode_thread_running = FREEDRIVE_MODE
+  write_output_integer_register(MODE_OUTPUT_INT_REGISTER, mode_thread_running)
+
+  if not is_steady():
+    stopj(DEFAULT_JOINT_ACCELERATION)
+  end
+  freedrive_mode()
+  # Loop inside this thread so freedrive() only gets called once instead of continuously. Necessary so that stopj() only called one time
+  # Thread will be killed inside command() function once mode is switched to something other than freedrive mode
+  while(mode == mode_thread_running and enable == 1): 
+    sync()
+  end
+  mode_thread_running = -1
+end
+
+thread waypointJoint():
+  mode_thread_running = WAYPOINT_JOINT_MODE
+  write_output_integer_register(MODE_OUTPUT_INT_REGISTER, mode_thread_running)
+  while(mode == mode_thread_running and enable == 1):
+    if not is_steady():
+      stopj(DEFAULT_JOINT_ACCELERATION)
+    end
+    if not diff_norm_within_tol(setp, get_target_joint_positions(), 0.0001) and avtr[0] > 0 and avtr[1] > 0:
+      movej(setp, avtr[0], avtr[1], avtr[2], avtr[3])
+    end
+    sync()
+  end
+  mode_thread_running = -1
+end
+
+thread waypointCartesian():
+  # THIS MODE IS CURRENTLY VERY UNSTABLE. DO NOT USE UNLESS WAYPOINT IS CLOSE TO CURRENT POSITION
+  # One way to make this more usable is to use movej instead of movel. We can still give the robot a cartesian position, but it will move there linearly in joint space
+  # Possibly needs to be broken into sub-modes (waypointJointj, waypointJointl, waypointCartesianj, waypointCartesianl) where Joint vs Cartesian specifies which set point is used and the j vs l suffix specifies whether the path is linearly interpolated in joint space or cartesian space
+  mode_thread_running = WAYPOINT_CARTESIAN_MODE
+  write_output_integer_register(MODE_OUTPUT_INT_REGISTER, mode_thread_running)
+  while(mode == mode_thread_running and enable == 1):
+    if not is_steady():
+      stopj(DEFAULT_JOINT_ACCELERATION)
+    end
+    if not diff_norm_within_tol(setp, pose_to_list(get_target_tcp_pose()), 0.0001) and avtr[0] > 0 and avtr[1] > 0:
+      movel(list_to_pose(setp), avtr[0], avtr[1], avtr[2], avtr[3])
+    end
+    sync()
+  end
+  mode_thread_running = -1
+end
+
+thread posControlJoint():
+  mode_thread_running = POSITION_CONTROL_JOINT_MODE
+  write_output_integer_register(MODE_OUTPUT_INT_REGISTER, mode_thread_running)
+  while(mode == mode_thread_running and enable == 1):
+    servoj(setp, 0, 0, servoj_params[0], servoj_params[1], servoj_params[2])
+    sync()
+  end
+  mode_thread_running = -1
+end
+
+thread posControlCartesian():
+  mode_thread_running = POSITION_CONTROL_CARTESIAN_MODE
+  write_output_integer_register(MODE_OUTPUT_INT_REGISTER, mode_thread_running)
+  while(mode == mode_thread_running and enable == 1):
+    servoj(get_inverse_kin(list_to_pose(setp)), 0, 0, servoj_params[0], servoj_params[1], servoj_params[2])
+    sync()
+  end
+  mode_thread_running = -1
+end
+
+thread velControlJoint():
+  mode_thread_running = VELOCITY_CONTROL_JOINT_MODE
+  write_output_integer_register(MODE_OUTPUT_INT_REGISTER, mode_thread_running)
+  while(mode == mode_thread_running and enable == 1):
+    speedj(setp, avtr[0], avtr[2])
+    sync()
+  end
+  mode_thread_running = -1
+end
+
+thread velControlCartesian():
+  # NOT STABLE
+  mode_thread_running = VELOCITY_CONTROL_CARTESIAN_MODE
+  write_output_integer_register(MODE_OUTPUT_INT_REGISTER, mode_thread_running)
+  Kp = [1.0,1.0,1.0,1.0,1.0,1.0]
+  Ki = [0.0,0.0,0.0,0.0,0.0,0.0]
+  err_i = [0.0,0.0,0.0,0.0,0.0,0.0]
+  while(mode == mode_thread_running and enable == 1):
+    err = list_subtract(setp, pose_to_list(get_actual_tcp_speed()))
+    err_i = list_add(err_i,err)
+    p_term = list_multiply(Kp, err)
+    i_term = list_multiply(Ki, err_i)
+
+    pos_setp = list_add(pose_to_list(get_actual_tcp_pose()), list_add(p_term,i_term))
+
+    servoj(get_inverse_kin(list_to_pose(pos_setp)), 0, 0, servoj_params[0], servoj_params[1], servoj_params[2])
+    sync()
+  end
+  mode_thread_running = -1
+end
+
+thread forceControl():
+  mode_thread_running = FORCE_CONTROL_MODE
+  mode_thread_running = -1
+end
+
+thread impedanceControl():
+  mode_thread_running = IMPEDANCE_CONTROL_MODE
+  write_output_integer_register(MODE_OUTPUT_INT_REGISTER, mode_thread_running)
+  if not is_steady():
+    stopj(DEFAULT_JOINT_ACCELERATION)
+  end
+  force_mode_set_damping(0.0)
+  Kp = [20000.0,20000.0,20000.0,500.0,500.0,500.0]
+  Kd = [1000.0,1000.0,1000.0,50.0,50.0,50.0]
+  selection_vector = [1,1,1,1,1,1]
+  limits = [0.3,0.3,0.3,1.0,1.0,1.0]
+  while(mode == mode_thread_running and enable == 1):
+    tool_pose = get_actual_tcp_pose()
+    pos_error = pose_diff(list_to_pose(setp),tool_pose)
+    vel_error = pose_diff(list_to_pose(setp2),get_actual_tcp_speed())
+    wrench = list_add(list_multiply(Kp,pos_error),list_multiply(Kd,vel_error))
+    wrench = list_saturate(wrench,[-250.0,-250.0,-250.0,-25.0,-25.0,-25.0],[250.0,250.0,250.0,25.0,25.0,25.0])
+    global wrench_command = wrench
+    global wrench_meas = get_tcp_force()
+    task_frame = p[tool_pose[0],tool_pose[1],tool_pose[2],0.0,0.0,0.0]
+    force_mode(task_frame, selection_vector, wrench, 2, limits)
+    sync()
+  end
+  mode_thread_running = -1
+end

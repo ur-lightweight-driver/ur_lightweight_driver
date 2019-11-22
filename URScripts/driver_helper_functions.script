@@ -1,0 +1,184 @@
+# REGISTER INDICES/OFFSETS
+MODE_INT_REGISTER = 0
+ENABLE_INT_REGISTER = 1
+PING_INT_REGISTER = 2
+
+SETP_DOUBLE_REGISTER_OFFSET = 0
+AVTR_DOUBLE_REGISTER_OFFSET = 6
+SERVOJ_PARAMS_DOUBLE_REGISTER_OFFSET = 10
+SETP2_DOUBLE_REGISTER_OFFSET = 13
+
+# MODE NUMBERS
+STANDBY_MODE = 0
+FREEDRIVE_MODE = 1
+WAYPOINT_JOINT_MODE = 2
+WAYPOINT_CARTESIAN_MODE = 3 # THIS MODE IS VERY UNSTABLE RIGHT NOW. RECOMMEND NOT USING UNLESS WAYPOINT IS RELATIVELY CLOSE TO CURRENT POSITION. FOR FAR AWAY WAYPOINTS, ROBOT WILL LIKELY RAISE ERROR AND STOP MOTION
+POSITION_CONTROL_JOINT_MODE = 4
+POSITION_CONTROL_CARTESIAN_MODE = 5
+VELOCITY_CONTROL_JOINT_MODE = 6
+VELOCITY_CONTROL_CARTESIAN_MODE = 7
+FORCE_CONTROL_MODE = 8
+IMPEDANCE_CONTROL_MODE = 9
+
+MODE_OUTPUT_INT_REGISTER = 0
+PING_OUTPUT_INT_REGISTER = 1
+
+DEFAULT_JOINT_ACCELERATION = 1.4
+
+def list_contains(value, list):
+  # Checks if a list contains at least one element equal to "value". Returns True if so, False otherwise
+  i = 0
+  while i < length(list):
+    if (list[i] == value):
+      return True
+    end
+    i = i + 1
+  end
+  return False
+end
+
+def init_list(n, type):
+  # Initializes and returns a list of size n. The elements of the list are of type "type"
+  # type can be either "INT" or "DOUBLE". Right now, if any other value is passed for type, will crash because i not defined
+  # n can be any integer between 1 and 6. Right now, if any other value is passed for n, will crash because list not defined
+  if type == "INT":
+    i = 0
+  elif type == "DOUBLE":
+    i = 0.0
+  end
+  if n == 1:
+    list = [i]
+  elif n == 2:
+    list = [i,i]
+  elif n == 3:
+    list = [i,i,i]
+  elif n == 4:
+    list = [i,i,i,i]
+  elif n == 5:
+    list = [i,i,i,i,i]
+  elif n == 6:
+    list = [i,i,i,i,i,i]
+  end
+  return list
+end
+
+def list_to_pose(list):
+  # Creates and returns a pose with the first 6 elements of "list". The values are copied directly (i.e. no kinematics or IK)
+  # Right now, if length of "list" is less than 6, this function will crash
+  pose = p[0.0,0.0,0.0,0.0,0.0,0.0]
+  i = 0
+  while i < 6:
+    pose[i] = list[i]
+    i = i + 1
+  end
+  return pose
+end
+
+def pose_to_list(pose):
+  # Creates and returns a list with the first 6 elements of "pose". The values are copied directly (i.e. no kinematics or IK)
+  # Right now, if length of "pose" is less than 6, this function will crash
+  list = [0.0,0.0,0.0,0.0,0.0,0.0]
+  i = 0
+  while i < 6:
+    list[i] = pose[i]
+    i = i + 1
+  end
+  return list
+end
+
+def diff_norm_within_tol(list1, list2, tol):
+  # Returns true if Euclidian norm of difference between list1 and list2 is <= tolerance "tol"
+  # Used mostly to determine if two 6-DOF vectors/lists are "close enough"
+  return norm(list_subtract(list1, list2)) <= tol
+end
+
+def read_registers_into_list(first, n, type):
+  # reads n registers consecutively starting with register with index "first". "type" indicates the register type. "INT" -> integer_register, "DOUBLE" -> float_register 
+  # Example: read_registers_into_list(first=2, n=3, type="DOUBLE") -> return list: [input_float_register_2, input_float_register_3, input_float_register_4]
+  # Right now, supports only "INT" and "DOUBLE" types
+  list = init_list(n,type)
+  i = 0
+  while i < n:
+    if type == "INT":
+      list[i] = read_input_integer_register(first + i)
+    elif type == "DOUBLE":
+      list[i] = read_input_float_register(first + i)
+    end
+    i = i + 1
+  end
+  return list
+end
+
+def min(a,b):
+  if a < b:
+    return a
+  else:
+    return b
+  end
+end
+
+def max(a,b):
+  if a > b:
+    return a
+  else:
+    return b
+  end
+end
+
+def list_subtract(list1, list2):
+  # Subtract 2 lists element-wise (list1 - list2). The first n list elements are subtracted, where n is the length of the shortest list. The returned result is a list of length n
+  # If shortest list has length < 1 or length > 6, function init_list() will crash
+  n = min(length(list1), length(list2))
+  result = init_list(n, "DOUBLE")
+  i = 0
+  while i < n:
+    result[i] = list1[i]-list2[i]
+    i = i + 1
+  end
+  return result
+end
+
+def list_add(list1, list2):
+  # Add 2 lists element-wise. The first n list elements are subtracted, where n is the length of the shortest list. The returned result is a list of length n
+  # If shortest list has length < 1 or length > 6, function init_list() will crash
+  n = min(length(list1), length(list2))
+  result = init_list(n, "DOUBLE")
+  i = 0
+  while i < n:
+    result[i] = list1[i]+list2[i]
+    i = i + 1
+  end
+  return result
+end
+
+def list_multiply(list1, list2):
+  # Multiply 2 lists element-wise. The first n list elements are multiplied, where n is the length of the shortest list. The returned result is a list of length n
+  # If shortest list has length < 1 or length > 6, function init_list() will crash
+  n = min(length(list1), length(list2))
+  result = init_list(n, "DOUBLE")
+  i = 0
+  while i < n:
+    result[i] = list1[i]*list2[i]
+    i = i + 1
+  end
+  return result
+end
+
+def pose_diff(p_to,p_from):
+  diff = pose_sub(p_to,p_from)
+  rot_trans = pose_trans(p[0.0,0.0,0.0,p_from[3],p_from[4],p_from[5]],p[diff[3],diff[4],diff[5],0.0,0.0,0.0])
+  return [diff[0],diff[1],diff[2],rot_trans[0],rot_trans[1],rot_trans[2]]
+end
+
+def list_saturate(list,min,max):
+  i = 0
+  while i < length(list):
+    if list[i] < min[i]:
+      list[i] = min[i]
+    elif list[i] > max[i]:
+      list[i] = max[i]
+    end
+    i = i + 1
+  end
+  return list
+end
