@@ -22,7 +22,7 @@ import rtde.rtde as rtde
 import rtde.rtde_config as rtde_config
 import helper as hp
 
-from ur_rtde.msg import Command, ToolState
+from ur_lightweight_driver.msg import Command, ToolState
 from sensor_msgs.msg import JointState
 from geometry_msgs.msg import WrenchStamped
 from std_msgs.msg import UInt32

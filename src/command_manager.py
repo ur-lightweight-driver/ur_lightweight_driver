@@ -5,7 +5,7 @@
 
 import rospy
 import sensor_msgs.msg as smsg
-from ur_rtde.msg import Command, Mode, Setpoint, Trajectory, ToolState
+from ur_lightweight_driver.msg import Command, Mode, Setpoint, Trajectory, ToolState
 from std_msgs.msg import Bool
 from sensor_msgs.msg import JointState
 import helper as hp
